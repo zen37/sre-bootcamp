@@ -1,3 +1,6 @@
+## curl
+curl -X POST -H "Content-Type: application/json" -d '{"user": "admin", "password": "secret"}' http://localhost:8080/login
+
 # Wizeline SRE Bootcamp Selection Challenge
 
 Thank you for registering for the Wizeline Academy SRE Bootcamp, and welcome to the Selection Challenge!
@@ -80,8 +83,9 @@ curl -H 'Accept: application/json' -H "Authorization: Bearer ${TOKEN}" localhost
   "data": "You are under protected data"
 }
 ```
+curl -X POST -H "Content-Type: application/json" -d '{"user": "...", "password": "..."}' http://localhost:8080/login
 <br />
-
+```
 ### Coding
   * Complete the following endpoints.
     - **`/login`**
