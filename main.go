@@ -7,14 +7,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"time"
+	"strings"
 
 	"github.com/dgrijalva/jwt-go"
 	_ "github.com/go-sql-driver/mysql"
 )
 
 func main() {
-	// Open a connection to the database, connection string should be stored for example in AWS Secrets Manager or Azure Key Vault or any other suitable service
+	// Open a connection to the database
+	// connection string should be retrieved from AWS Secrets Manager or Azure Key Vault or any other suitable service
 	db, err := sql.Open("mysql", "secret:jOdznoyH6swQB9sTGdLUeeSrtejWkcw@tcp(sre-bootcamp-selection-challenge.cabf3yhjqvmq.us-east-1.rds.amazonaws.com:3306)/bootcamp_tht")
 	if err != nil {
 		panic(err.Error())
@@ -29,7 +30,9 @@ func main() {
 
 	// Start the HTTP server and handle requests
 	http.HandleFunc("/login", handleLogin(db))
-	http.ListenAndServe(":8080", nil)
+	http.HandleFunc("/protected", handleProtected)
+
+	http.ListenAndServe(":8000", nil)
 
 	//TestConnection(db)
 }
@@ -84,25 +87,74 @@ func handleLogin(db *sql.DB) http.HandlerFunc {
 	}
 }
 
+func handleProtected(w http.ResponseWriter, r *http.Request) {
+	// Extract the JWT token from the Authorization header
+	tokenString := extractToken(r)
+	if tokenString == "" {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	// Parse and verify the JWT token
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		// Check that the signing method is HMAC
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])
+		}
+		// secret should be retrieved from AWS Secrets Manager or Azure Key Vault or any other suitable service
+		secret := "my2w7wjd7yXF64FIADfJxNs1oupTGAuW"
+		// Return the secret key used to sign the token
+		return []byte(secret), nil
+	})
+	if err != nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	// Check that the role claim in the JWT is equal to "admin"
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	role, ok := claims["role"].(string)
+	if !ok || role != "admin" {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	// If the role claim in the JWT is equal to "admin", allow access to the protected resource
+	fmt.Fprint(w, "Protected resource accessed successfully")
+}
+
 // generateToken generates a JWT token for the given user ID and role
 func generateToken(role string) (string, error) {
+	// secret should be retrieved from AWS Secrets Manager or Azure Key Vault or any other suitable service
+	secret := "my2w7wjd7yXF64FIADfJxNs1oupTGAuW"
 	// Create a new JWT token
 	token := jwt.New(jwt.SigningMethodHS256)
 
 	// Set the claims for the token
 	claims := token.Claims.(jwt.MapClaims)
-	//claims["user_id"] = userID
 	claims["role"] = role
-	claims["exp"] = jwt.TimeFunc().Add(time.Hour * 24).Unix() // Token expires in 24 hours
+	//claims["exp"] = jwt.TimeFunc().Add(time.Hour * 24).Unix() // Token expires in 24 hours
 
-	// Sign the token with a secret key
-	secretKey := []byte("my_secret_key")
+	// Sign the token with the secret key
+	secretKey := []byte(secret)
 	signedToken, err := token.SignedString(secretKey)
 	if err != nil {
 		return "", err
 	}
-	fmt.Println(token)
 	return signedToken, nil
+}
+
+func extractToken(r *http.Request) string {
+	authHeader := r.Header.Get("Authorization")
+	if authHeader == "" {
+		return ""
+	}
+	token := strings.Replace(authHeader, "Bearer ", "", 1)
+	return token
 }
 
 func sha512Hash(str string) string {
